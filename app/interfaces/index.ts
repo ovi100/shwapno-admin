@@ -1,5 +1,5 @@
 import type { ReactElement, SVGProps } from 'react';
-import { Edge, Size, Type, Variant } from "./common";
+import { Edge, Size, TabTheme, TabVariant, Type, Variant } from "./common";
 
 
 export interface ButtonProps {
@@ -19,4 +19,21 @@ export interface LoadingProps {
   size?: Size;
   variant?: Variant;
 };
+
+type TabItem = {
+  label: string;
+  content: React.ReactNode;
+  icon?: ReactElement<SVGProps<SVGSVGElement>> | null;
+};
+
+export interface TabProps {
+  tabs?: TabItem[];
+  theme?: TabTheme;
+  size?: Size;
+  variant?: TabVariant;
+  type?: "horizontal" | "vertical";
+  trackVisibility?: boolean;
+}
+
+
 
