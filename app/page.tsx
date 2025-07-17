@@ -1,12 +1,48 @@
 "use client";
 import Image from "next/image";
-import { Button, Switch, Tab } from "./components";
+import { Button, Switch, Tab, Table } from "./components";
 import { FiUser, FiSettings } from "react-icons/fi";
 import { BiCheckCircle } from "react-icons/bi";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const [enabled, setEnabled] = useState(false);
+  const [rows, setRows] = useState<object[]>([]);
+  const perPage = 5;
+
+  // Fetch initial data from dummyjson
+  useEffect(() => {
+    const fetchUsers = async (page = 1) => {
+      const skip = (page - 1) * perPage;
+      const response = await fetch(
+        `https://dummyjson.com/users?limit=${perPage}&skip=${skip}&select=firstName,age,phone,bloodGroup,role`
+      );
+      const json = await response.json();
+      setRows(json.users);
+    };
+    fetchUsers();
+  }, []);
+
+  // Optional: search API function
+  const searchUsers = async (query: string) => {
+    const res = await fetch(
+      `https://dummyjson.com/users/search?q=${encodeURIComponent(query)}`
+    );
+    const json = await res.json();
+    return json.users;
+  };
+
+  // const columns = [
+  //   { label: "ID", key: "id" },
+  //   { label: "First Name", key: "firstName", sticky: true },
+  //   { label: "Last Name", key: "lastName" },
+  //   { label: "Email", key: "email" },
+  //   { label: "Age", key: "age", calcTotal: true },
+  //   { label: "Gender", key: "gender" },
+  //   { label: "Role", key: "role" },
+  //   { label: "Phone", key: "phone" },
+  // ];
+
   const tabs = [
     {
       label: "Profile",
@@ -29,6 +65,7 @@ export default function Home() {
       icon: <FiSettings className="text-black" />,
     },
   ];
+
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-md flex flex-col items-center justify-center gap-2">
@@ -94,6 +131,17 @@ export default function Home() {
           size="small"
           type="square"
           noChange={() => setEnabled(!enabled)}
+        />
+      </div>
+      <div className="data-table mt-10">
+        <h1 className="text-2xl font-bold mb-4">User Data</h1>
+        <Table
+          rows={rows}
+          // columns={columns}
+          perPage={perPage}
+          stickyColumnKeys={["firstName"]}
+          searchable={true}
+          searchApi={searchUsers}
         />
       </div>
     </div>
