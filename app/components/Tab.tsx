@@ -173,7 +173,7 @@ const Tab: React.FC<TabProps> = ({
         )}
       </div>
 
-      <div key={fadeKey} className="opacity-0 animate-fadeIn mt-2">
+      <div key={fadeKey} className="flex-1/2 opacity-0 animate-fadeIn mt-2">
         {tabs[activeIndex]?.content}
       </div>
 

@@ -20,6 +20,16 @@ export interface LoadingProps {
   variant?: Variant;
 };
 
+export type SwitchProps = {
+  size?: Size;
+  variant?: Variant;
+  type?: "square" | "toggle";
+  value?: boolean;
+  noChange?: (() => void) | null;
+  disabled?: boolean;
+  label?: string;
+};
+
 type TabItem = {
   label: string;
   content: React.ReactNode;

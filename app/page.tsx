@@ -1,12 +1,12 @@
 "use client";
 import Image from "next/image";
-import { Button, Tab } from "./components";
+import { Button, Switch, Tab } from "./components";
 import { FiUser, FiSettings } from "react-icons/fi";
 import { BiCheckCircle } from "react-icons/bi";
-// import { useState } from "react";
+import { useState } from "react";
 
 export default function Home() {
-  // const [activeIndex, setActiveIndex] = useState(0);
+  const [enabled, setEnabled] = useState(false);
   const tabs = [
     {
       label: "Profile",
@@ -74,42 +74,27 @@ export default function Home() {
           onClick={() => alert("button clicked")}
         />
       </div>
-      <div className="bg-gray-100 mt-5 p-8">
+      <div className="tab bg-gray-100 mt-5 p-8">
         <Tab
           tabs={tabs}
           theme="classic"
           variant="primary"
           type="horizontal"
-          trackVisibility={false}
+          trackVisibility={true}
         />
-
-        {/* <div className="tab flex flex-row mt-10">
-          <div className="tab-header inline-flex items-center gap-3 border-b border-gray-300">
-            {tabs.map((tab, index) => (
-              <button
-                key={index}
-                className={`flex items-center gap-2 ${
-                  index === activeIndex
-                    ? "border-b-2 border-blue-600"
-                    : "border-b-2 border-transparent"
-                } px-4 py-2`}
-                onClick={() => setActiveIndex(index)}
-              >
-                {tab.icon && <span>{tab.icon}</span>}
-                <span
-                  className={`${
-                    index === activeIndex ? "text-blue-600" : "text-black"
-                  }`}
-                >
-                  {tab.label}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 animate-fadeIn">
-            {tabs[activeIndex]?.content}
-          </div>
-        </div> */}
+      </div>
+      <div className="switch flex gap-3 mt-10">
+        <Switch
+          value={enabled}
+          size="small"
+          noChange={() => setEnabled(!enabled)}
+        />
+        <Switch
+          value={enabled}
+          size="small"
+          type="square"
+          noChange={() => setEnabled(!enabled)}
+        />
       </div>
     </div>
   );
