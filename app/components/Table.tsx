@@ -136,7 +136,7 @@ const Table: React.FC<TableProps> = ({
         />
       )}
 
-      <table className="min-w-full border border-collapse border-gray-300">
+      <table className="min-w-full border border-collapse border-gray-300 rounded-md">
         <thead className="bg-gray-100">
           <tr>
             {columnDefs.map((col) => (
