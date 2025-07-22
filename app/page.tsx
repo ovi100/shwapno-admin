@@ -5,25 +5,46 @@ import { FiUser, FiSettings } from "react-icons/fi";
 import { BiCheckCircle } from "react-icons/bi";
 import { useEffect, useMemo, useState } from "react";
 import { IoSearchOutline } from "react-icons/io5";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+const API_URL = "https://dummyjson.com/users";
 
-export default function Home() {
+const Home = () => {
   const [enabled, setEnabled] = useState<boolean>(false);
-  const showAllCheck: boolean = false;
+  const showAllCheck: boolean = true;
   const isCheckable: boolean = true;
   const calculateColumns: object[] = [
-    { column: "id", calculate: "count" },
-    { column: "age", calculate: "sum" },
+    { column: "age", calculate: "min" },
+    { column: "role", calculate: "unique" },
+    { column: "gender", calculate: "unique" },
     { column: "weight", calculate: "average" },
+    { column: "bloodGroup", calculate: "unique" },
   ];
   const [rows, setRows] = useState<object[]>([]);
   const [checkedItems, setCheckedItems] = useState<object[]>([]);
   const [search, setSearch] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pages, setPages] = useState<number[]>([]);
-  // const [jumpPage, setJumpPage] = useState<number>(1);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
-  const perPage = 10;
+  const [perPage, setPerPage] = useState<number>(10);
+
+  type User = {
+    firstName: string;
+    age: number;
+    role: string;
+    gender: string;
+    weight: number;
+    bloodGroup: string;
+  };
+
+  const debounce = (func: (...args: any[]) => void, delay: number) => {
+    let timer: NodeJS.Timeout;
+    return (...args: any[]) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => func(...args), delay);
+    };
+  };
 
   const formatHeader = (key: string) =>
     key
@@ -35,7 +56,8 @@ export default function Home() {
   const fetchUsers = async (page: number = 1) => {
     const skip = (page - 1) * perPage;
     const response = await fetch(
-      `https://dummyjson.com/users?limit=${perPage}&skip=${skip}&select=firstName,age,role,gender,weight,bloodGroup`
+      API_URL +
+        `?limit=${perPage}&skip=${skip}&select=firstName,age,role,gender,weight,bloodGroup`
     );
     const result = await response.json();
     const data = result.users;
@@ -51,21 +73,35 @@ export default function Home() {
   };
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [perPage]);
 
-  const handlePageChange = (page: number) => {
-    fetchUsers(page);
+  const handlePageChange = async (page: number) => {
+    await fetchUsers(page);
     setCurrentPage(page);
   };
 
   // Optional: search API function
   const searchUsers = async (query: string) => {
-    const res = await fetch(
-      `https://dummyjson.com/users/search?q=${encodeURIComponent(query)}`
-    );
-    const json = await res.json();
-    return json.users;
+    try {
+      const response = await fetch(
+        API_URL + `/search?q=${encodeURIComponent(query)}`
+      );
+      const result = await response.json();
+      const data = result.users.map((user: User) => ({
+        firstName: user.firstName,
+        age: user.age,
+        role: user.role,
+        gender: user.gender,
+        weight: user.weight,
+        bloodGroup: user.bloodGroup,
+      }));
+      setRows(data);
+    } catch (error) {
+      console.error("Error searching users:", error);
+    }
   };
+
+  const debouncedSearch = debounce(searchUsers, 500);
 
   const headers = useMemo(() => {
     // if (columns) return columns;
@@ -125,34 +161,52 @@ export default function Home() {
     }
   };
 
+  const getArrayType = (array: unknown) => {
+    if (!Array.isArray(array) || array.length === 0) return null;
+
+    const firstType = typeof array[0];
+    const allSameType = array.every((item) => typeof item === firstType);
+
+    return allSameType ? firstType : "mixed";
+  };
+
   // Calculate column values if needed
   const calculatedColumns = useMemo(() => {
     const results = calculateColumns.map(({ column, calculate }) => {
       let value;
+      const columnData = sortedData.map((item) => item[column]);
+      const dataType = getArrayType(columnData);
+      const sum = columnData.reduce((sum, item) => sum + item, 0);
 
       switch (calculate) {
         case "count":
-          value = sortedData.length;
+          value = columnData.length;
           break;
         case "sum":
-          value = sortedData.reduce(
-            (sum, item) => sum + (item[column] || 0),
-            0
-          );
+          value = dataType == "number" ? sum : "#N/A";
           break;
         case "average":
-          const sum = sortedData.reduce(
-            (total, item) => total + (item[column] || 0),
-            0
-          );
-          value = sum / sortedData.length;
+          value = dataType == "number" ? sum / columnData.length : "#N/A";
+          break;
+        case "unique":
+          value = [...new Set(columnData)].length;
+          break;
+        case "min":
+          value = dataType == "number" ? Math.min(...columnData) : "#N/A";
+          break;
+        case "max":
+          value = dataType == "number" ? Math.max(...columnData) : "#N/A";
           break;
         default:
           value = null;
       }
 
       // Format the value to remove decimal places if it's an integer
-      value = Number.isInteger(value) ? value.toString() : value.toFixed(2);
+      value = Number.isInteger(value)
+        ? value.toString()
+        : isNaN(value)
+        ? value
+        : value.toFixed(2);
 
       return {
         key: column,
@@ -161,7 +215,71 @@ export default function Home() {
       };
     });
     return results;
-  }, [sortedData, calculateColumns]);
+  }, [calculateColumns, sortedData]);
+
+  const exportToExcel = async (format: "xlsx" | "csv") => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Sheet 1");
+
+    // Add headers with styling
+    const headerRow = worksheet.addRow(headers.map((col) => col.label));
+
+    // Style the header row
+    headerRow.eachCell((cell) => {
+      cell.font = {
+        size: 13,
+        color: { argb: "FFFFFFFF" },
+      };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF000000" },
+      };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // Add data rows
+    sortedData.forEach((row) => {
+      worksheet.addRow(headers.map((col) => row[col.key]));
+    });
+
+    // Add calculated values if any
+    // if (Object.keys(calculatedColumns).length > 0) {
+    //   worksheet.addRow([]); // Empty row
+    //   worksheet.addRow(["Calculated Values"]);
+    //   headers.forEach((col) => {
+    //     if (calculatedColumns[col.key]) {
+    //       worksheet.addRow([col.label, calculatedColumns[col.key]]);
+    //     }
+    //   });
+    // }
+
+    // Generate file
+    if (format === "xlsx") {
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), "table_data.xlsx");
+    } else {
+      const buffer = await workbook.csv.writeBuffer();
+      saveAs(new Blob([buffer]), "table_data.csv");
+    }
+  };
+
+  const handleExport = (format: "xlsx" | "csv") => {
+    switch (format) {
+      case "xlsx":
+        exportToExcel("xlsx");
+        break;
+      case "csv":
+        exportToExcel("csv");
+        break;
+    }
+  };
 
   // const columns = [
   //   { label: "ID", key: "id" },
@@ -245,7 +363,7 @@ export default function Home() {
       <div className="tab bg-gray-100 mt-5 p-8">
         <Tab
           tabs={tabs}
-          theme="classic"
+          theme="capsule"
           variant="primary"
           type="horizontal"
           trackVisibility={true}
@@ -274,24 +392,38 @@ export default function Home() {
           searchable={true}
           searchApi={searchUsers}
         /> */}
-
-        <div className="search-box pb-4">
-          <label htmlFor="table-search" className="sr-only">
-            Search
-          </label>
-          <div className="relative mt-1">
-            <div className="absolute inset-y-0 rtl:inset-r-0 start-0 flex items-center ps-3 pointer-events-none">
-              <IoSearchOutline className="text-gray-500" />
+        <div className="flex items-center justify-between">
+          <div className="search-box pb-4">
+            <label htmlFor="table-search" className="sr-only">
+              Search
+            </label>
+            <div className="relative mt-1">
+              <div className="absolute inset-y-0 rtl:inset-r-0 start-0 flex items-center ps-3 pointer-events-none">
+                <IoSearchOutline className="text-gray-500" />
+              </div>
+              <input
+                type="text"
+                id="table-search"
+                className="w-80 bg-white block px-10 py-2 text-sm text-gray-500 border border-gray-300 rounded-md focus:outline-none"
+                placeholder="Search information..."
+                value={search}
+                // onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  debouncedSearch(e.target.value);
+                }}
+              />
             </div>
-            <input
-              type="text"
-              id="table-search"
-              className="block px-10 py-2 text-sm text-gray-900 border border-gray-300 rounded-md w-80 bg-gray-50 focus:ring-0 focus:border-blue-500"
-              placeholder="Search for user"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
           </div>
+          <select
+            id="export"
+            className="h-9 bg-white border border-gray-300 text-sm rounded-md ms-0 px-2 focus:outline-none"
+            onChange={(e) => handleExport(e.target.value as "xlsx" | "csv")}
+          >
+            <option value="">Export Table</option>
+            <option value="xlsx">xlsx</option>
+            <option value="csv">csv</option>
+          </select>
         </div>
         <div className="relative overflow-x-auto rounded-lg">
           <table className="w-full text-sm text-gray-500">
@@ -396,11 +528,9 @@ export default function Home() {
                         className="px-4 py-2 border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-xs text-slate-600 font-medium text-center capitalize"
                       >
                         {columnItem
-                          ? `${
-                              columnItem.operation === "count"
-                                ? "total = "
-                                : columnItem.operation + " = "
-                            } ${columnItem.value}`
+                          ? `${columnItem.operation + " = "} ${
+                              columnItem.value
+                            }`
                           : ""}
                       </td>
                     );
@@ -410,67 +540,101 @@ export default function Home() {
             </tbody>
           </table>
         </div>
-        <nav
-          className="flex items-center justify-end mt-5"
-          aria-label="Table navigation"
-        >
-          <ul className="inline-flex -space-x-px rtl:space-x-reverse text-sm h-8">
-            <li>
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                className="flex items-center justify-center px-3 h-9 ms-0 leading-tight text-sm font-medium text-gray-700 
+        {pages.length > 1 && (
+          <nav
+            className="flex items-center justify-end gap-x-3 mt-5"
+            aria-label="Table navigation"
+          >
+            <select
+              id="per-page"
+              className="h-9 bg-white border border-gray-300 text-sm rounded-md ms-0 focus:outline-none"
+              value={perPage}
+              defaultValue={10}
+              onChange={(e) =>
+                setPerPage(
+                  Number(e.target.value) == 0 ? 10 : Number(e.target.value)
+                )
+              }
+            >
+              <option value="">Row Per Page</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+              <option value="35">35</option>
+            </select>
+            <ul className="inline-flex -space-x-px rtl:space-x-reverse text-sm h-8">
+              <li>
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  className="flex items-center justify-center px-3 h-9 ms-0 leading-tight text-sm font-medium text-gray-700 
                   bg-white rounded-s-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 capitalize cursor-pointer"
-                disabled={currentPage === 1}
-              >
-                previous
-              </button>
-            </li>
-            {pages.slice(0, 3).map((page) => (
-              <li key={page}>
-                <button
-                  onClick={() => handlePageChange(page)}
-                  className={`flex items-center justify-center px-3 h-9 ms-0 leading-tight text-gray-500 
+                  disabled={currentPage === 1}
+                >
+                  previous
+                </button>
+              </li>
+              {pages.slice(0, 2).map((page) => (
+                <li key={page}>
+                  <button
+                    onClick={() => handlePageChange(page)}
+                    className={`flex items-center justify-center px-3 h-9 ms-0 leading-tight text-gray-500 
                   ${
                     page === currentPage ? "bg-blue-200" : "bg-white"
                   } border border-gray-300 hover:bg-gray-100 hover:text-gray-700 cursor-pointer`}
-                >
-                  {page}
-                </button>
-              </li>
-            ))}
-            <div>
-              <input
-                className="w-9 px-1 h-9 bg-white border border-gray-300 text-center focus:outline-none"
-                placeholder="..............."
-                onChange={(e) => handlePageChange(Number(e.target.value))}
-              />
-            </div>
-            {pages.slice(-3).map((page) => (
-              <li key={page}>
-                <button
-                  onClick={() => handlePageChange(page)}
-                  className={`flex items-center justify-center px-3 h-9 ms-0 leading-tight text-gray-500 
+                  >
+                    {page}
+                  </button>
+                </li>
+              ))}
+              <div>
+                <input
+                  className={`w-9 px-1 h-9 ${
+                    pages.slice(0, 2).includes(currentPage) ||
+                    pages.slice(-2).includes(currentPage)
+                      ? "bg-white"
+                      : "bg-blue-200"
+                  } border border-gray-300 text-center focus:outline-none`}
+                  placeholder="..............."
+                  value={
+                    pages.slice(0, 2).includes(currentPage) ||
+                    pages.slice(-2).includes(currentPage)
+                      ? ""
+                      : currentPage
+                  }
+                  onChange={(e) => handlePageChange(Number(e.target.value))}
+                />
+              </div>
+              {pages.slice(-2).map((page) => (
+                <li key={page}>
+                  <button
+                    onClick={() => handlePageChange(page)}
+                    className={`flex items-center justify-center px-3 h-9 ms-0 leading-tight text-gray-500 
                   ${
                     page === currentPage ? "bg-blue-200" : "bg-white"
                   } border border-gray-300 hover:bg-gray-100 hover:text-gray-700 cursor-pointer`}
-                >
-                  {page}
-                </button>
-              </li>
-            ))}
-            <li>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                className="flex items-center justify-center px-3 h-9 ms-0 leading-tight text-sm font-medium text-gray-700 
+                  >
+                    {page}
+                  </button>
+                </li>
+              ))}
+              <li>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  className="flex items-center justify-center px-3 h-9 ms-0 leading-tight text-sm font-medium text-gray-700 
                   bg-white rounded-e-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 capitalize"
-                disabled={currentPage > pages.length}
-              >
-                next
-              </button>
-            </li>
-          </ul>
-        </nav>
+                  disabled={currentPage > pages.length}
+                >
+                  next
+                </button>
+              </li>
+            </ul>
+          </nav>
+        )}
       </div>
     </div>
   );
-}
+};
+
+export default Home;
