@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 const API_URL = "https://dummyjson.com/users";
 
 type User = {
+  id: number;
   firstName: string;
   age: number;
   role: string;
@@ -54,19 +55,22 @@ const Home = () => {
 
   const searchUsers = async (query: string) => {
     try {
-      const response = await fetch(
-        API_URL + `/search?q=${encodeURIComponent(query)}`
-      );
-      const result = await response.json();
-      const data = result.users.map((user: User) => ({
-        firstName: user.firstName,
-        age: user.age,
-        role: user.role,
-        gender: user.gender,
-        weight: user.weight,
-        bloodGroup: user.bloodGroup,
-      }));
-      setRows(data);
+      if (query) {
+        const response = await fetch(
+          API_URL + `/search?q=${encodeURIComponent(query)}`
+        );
+        const result = await response.json();
+        const data = result.users.map((user: User) => ({
+          id: user.id,
+          firstName: user.firstName,
+          age: user.age,
+          role: user.role,
+          gender: user.gender,
+          weight: user.weight,
+          bloodGroup: user.bloodGroup,
+        }));
+        setData(data);
+      }
     } catch (error) {
       console.error("Error searching users:", error);
     }
@@ -181,12 +185,14 @@ const Home = () => {
           headers={headers}
           totalItems={totalItems}
           currentPage={currentPage}
-          stickyColumns={["firstName"]}
+          stickyColumns={["age", "role"]}
           columnOperations={columnOperations}
           searchable={true}
+          onSearch={searchUsers}
           onLimitChange={setPerPage}
           onPageChange={fetchUsers}
           isCheckable={true}
+          exportable={true}
           onChecked={setCheckedItems}
         />
       </div>

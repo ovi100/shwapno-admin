@@ -244,31 +244,34 @@ const Table: React.FC<TableProps> = ({
     }
   };
 
+  const handleSearch = (term: string) => {
+    if (!debouncedSearch) return;
+    setSearch(term);
+
+    term === "" ? handlePageChange(1) : debouncedSearch(term);
+  };
+
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-1 md:gap-0 mb-4">
         {searchable && (
-          <div className="search-box pb-4">
-            <div className="relative mt-1">
+          <div className="search-box">
+            <div className="relative md:mt-1">
               <div className="absolute inset-y-0 rtl:inset-r-0 start-0 flex items-center ps-3 pointer-events-none">
                 <IoSearchOutline className="text-gray-500" />
               </div>
               <input
                 type="text"
                 id="table-search"
-                className="w-76 bg-white block px-10 py-2 text-sm text-gray-500 border border-gray-300 rounded-md focus:outline-none"
+                className="w-52 md:w-76 h-9 bg-white block px-10 py-2 text-sm text-gray-500 border border-gray-300 rounded-md focus:outline-none"
                 placeholder="Search anything..."
                 value={search}
-                // onChange={(e) => setSearch(e.target.value)}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  if (debouncedSearch) debouncedSearch(e.target.value);
-                }}
+                onChange={(e) => handleSearch(e.target.value)}
               />
               {search && (
                 <button
                   className="absolute inset-y-0 rtl:inset-r-0 end-2 flex items-center ps-3 cursor-pointer"
-                  onClick={() => setSearch("")}
+                  onClick={() => handleSearch("")}
                 >
                   <IoCloseOutline className="text-gray-500" />
                 </button>
@@ -279,11 +282,11 @@ const Table: React.FC<TableProps> = ({
         {exportable && (
           <select
             id="export"
-            className="h-9 bg-white border border-gray-300 text-sm rounded-md ms-0 px-2 focus:outline-none"
-            defaultValue="xlsx"
+            className="w-2/5 md:w-auto h-9 bg-white border border-gray-300 text-sm rounded-md ms-0 px-2 focus:outline-none"
+            defaultValue="Export Data"
             onChange={(e) => handleExport(e.target.value as "xlsx" | "csv")}
           >
-            <option value="">Export Table</option>
+            <option value="">Export Data</option>
             <option value="xlsx">xlsx</option>
             <option value="csv">csv</option>
           </select>
@@ -310,11 +313,10 @@ const Table: React.FC<TableProps> = ({
             <p className="text-gray-500 mt-3">No data found</p>
           </div>
         )}
-
         {sortedData.length > 0 && (
           <table className="w-full relative text-sm text-gray-500">
             <thead className="bg-white sticky top-0 text-xs text-gray-700 uppercase z-10">
-              <tr className="">
+              <tr className="relative">
                 {isCheckable && (
                   <th
                     scope="col"
@@ -337,7 +339,11 @@ const Table: React.FC<TableProps> = ({
                   <th
                     key={header.key}
                     scope="col"
-                    className="border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 hover:cursor-pointer px-4 py-3"
+                    className={`${
+                      stickyColumns.includes(header.key)
+                        ? "sticky -left-1 bg-white z-10"
+                        : ""
+                    } border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 hover:cursor-pointer px-4 py-3`}
                   >
                     <div
                       className="flex items-center justify-center gap-1"
@@ -350,11 +356,14 @@ const Table: React.FC<TableProps> = ({
                         viewBox="0 0 24 24"
                         strokeWidth={1.2}
                         stroke="currentColor"
-                        className={`size-4 text-black transition duration-300 ${
-                          !sortAsc ? "rotate-180" : ""
-                        } ${
-                          sortKey === header.key ? "opacity-100" : "opacity-0"
-                        }`}
+                        className={`size-4 ${
+                          sortKey === header.key
+                            ? "text-black"
+                            : "text-gray-300"
+                        } transition duration-300 ${
+                          !sortAsc && sortKey === header.key ? "rotate-180" : ""
+                        } `}
+                        // ${sortKey === header.key ? "opacity-100" : "opacity-0"}
                       >
                         <path
                           strokeLinecap="round"
@@ -370,7 +379,7 @@ const Table: React.FC<TableProps> = ({
             <tbody>
               {sortedData.map((row, index) => (
                 <tr
-                  className={`${
+                  className={`relative group ${
                     checkedItems.includes(row) ? "bg-blue-50" : "bg-white"
                   } hover:bg-blue-50 hover:cursor-pointer`}
                   key={index}
@@ -393,7 +402,9 @@ const Table: React.FC<TableProps> = ({
                     <td
                       key={col.key}
                       className={`${
-                        stickyColumns.includes(col.key) ? "sticky left-0" : ""
+                        stickyColumns.includes(col.key)
+                          ? "sticky -left-1 bg-white group-hover:bg-blue-50 z-10 group-hover:z-0"
+                          : ""
                       } border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-center px-4 py-2`}
                     >
                       {row[col.key]}
@@ -402,7 +413,7 @@ const Table: React.FC<TableProps> = ({
                 </tr>
               ))}
               {calculatedColumns.length > 0 && (
-                <tr className="bg-white hover:bg-blue-50 hover:cursor-pointer">
+                <tr className="relative group bg-white hover:bg-blue-50 hover:cursor-pointer">
                   {isCheckable && (
                     <td className="px-4 py-2 border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-center"></td>
                   )}
@@ -413,7 +424,11 @@ const Table: React.FC<TableProps> = ({
                     return (
                       <td
                         key={`result-${header.key}`}
-                        className="px-4 py-2 border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-xs text-slate-600 font-medium text-center capitalize"
+                        className={`${
+                          stickyColumns.includes(header.key)
+                            ? "sticky -left-1 bg-white group-hover:bg-blue-50 z-10 group-hover:z-0"
+                            : ""
+                        } border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-xs text-slate-600 font-medium text-center capitalize px-4 py-2`}
                       >
                         {columnItem
                           ? `${columnItem.operation + " = "} ${
@@ -436,16 +451,15 @@ const Table: React.FC<TableProps> = ({
         >
           <select
             id="per-page"
-            className="h-9 bg-white border border-gray-300 text-sm rounded-md ms-0 focus:outline-none"
+            className="h-9 bg-white border border-gray-300 text-sm rounded-md focus:outline-none"
             value={perPage}
-            defaultValue={10}
             onChange={(e) =>
               onLimitChange(
                 Number(e.target.value) == 0 ? 10 : Number(e.target.value)
               )
             }
           >
-            <option value="">Row Per Page</option>
+            <option value="">Row/Page</option>
             <option value="10">10</option>
             <option value="15">15</option>
             <option value="20">20</option>
@@ -457,18 +471,34 @@ const Table: React.FC<TableProps> = ({
             <li>
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
-                className="flex items-center justify-center px-3 h-9 ms-0 leading-tight text-sm font-medium text-gray-700 
+                className="flex items-center justify-center px-2.5 lg:px-3 h-9 ms-0 leading-tight text-xs lg:text-sm font-medium text-gray-700 
                   bg-white rounded-s-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 capitalize cursor-pointer"
                 disabled={currentPage === 1}
               >
-                previous
+                <span className="hidden lg:block">previous</span>
+                <span className="block lg:hidden">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="size-4"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15.75 19.5 8.25 12l7.5-7.5"
+                    />
+                  </svg>
+                </span>
               </button>
             </li>
             {pages.slice(0, 2).map((page) => (
               <li key={page}>
                 <button
                   onClick={() => handlePageChange(page)}
-                  className={`flex items-center justify-center px-3 h-9 ms-0 leading-tight text-gray-500 
+                  className={`flex items-center justify-center px-2.5 lg:px-3 h-9 ms-0 leading-tight text-xs lg:text-sm text-gray-500 
                   ${
                     page === currentPage ? "bg-blue-200" : "bg-white"
                   } border border-gray-300 hover:bg-gray-100 hover:text-gray-700 cursor-pointer`}
@@ -484,7 +514,7 @@ const Table: React.FC<TableProps> = ({
                   pages.slice(-2).includes(currentPage)
                     ? "bg-white"
                     : "bg-blue-200"
-                } border border-gray-300 text-center focus:outline-none`}
+                } border border-gray-300 text-xs lg:test-sm text-center focus:outline-none`}
                 placeholder="..............."
                 value={
                   pages.slice(0, 2).includes(currentPage) ||
@@ -499,7 +529,7 @@ const Table: React.FC<TableProps> = ({
               <li key={page}>
                 <button
                   onClick={() => handlePageChange(page)}
-                  className={`flex items-center justify-center px-3 h-9 ms-0 leading-tight text-gray-500 
+                  className={`flex items-center justify-center px-2.5 lg:px-3 h-9 ms-0 leading-tight text-xs lg:text-sm text-gray-500 
                   ${
                     page === currentPage ? "bg-blue-200" : "bg-white"
                   } border border-gray-300 hover:bg-gray-100 hover:text-gray-700 cursor-pointer`}
@@ -511,11 +541,27 @@ const Table: React.FC<TableProps> = ({
             <li>
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
-                className="flex items-center justify-center px-3 h-9 ms-0 leading-tight text-sm font-medium text-gray-700 
+                className="flex items-center justify-center px-2 lg:px-3 h-9 ms-0 leading-tight text-xs lg:text-sm font-medium text-gray-700 
                   bg-white rounded-e-lg border border-gray-300 hover:bg-gray-100 hover:text-gray-700 capitalize"
                 disabled={currentPage > pages.length}
               >
-                next
+                <span className="hidden lg:block">next</span>
+                <span className="block lg:hidden">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="size-4"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m8.25 4.5 7.5 7.5-7.5 7.5"
+                    />
+                  </svg>
+                </span>
               </button>
             </li>
           </ul>
