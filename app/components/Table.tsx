@@ -1,70 +1,88 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { IoChevronDown, IoChevronUp } from "react-icons/io5";
-import { debounce, formatHeader } from "../utils";
+import React, { useMemo, useState } from "react";
+import { debounce, formatHeader, getArrayType } from "../utils";
 import { IoSearchOutline, IoCloseOutline } from "react-icons/io5";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
-type ColumnItem = {
+type HeaderItem = {
   label: string;
   key: string;
 };
 
+type TableRow = { [key: string]: any };
+
+type operationItem = {
+  key: string;
+  operation: "count" | "sum" | "average" | "unique" | "min" | "max";
+};
+
 type TableProps = {
-  rows: object[];
-  columns?: ColumnItem[];
+  data: TableRow[];
+  headers?: HeaderItem[];
+  totalItems?: number;
   perPage?: number;
-  showAllCheck: boolean;
-  isCheckable: boolean;
-  calculateColumns: object[];
-  stickyColumnKeys?: string[];
+  currentPage?: number;
+  showAllCheck?: boolean;
+  isCheckable?: boolean;
+  columnOperations?: operationItem[];
+  stickyColumns?: string[];
   searchable?: boolean;
   exportable?: boolean;
-  onPageChange?: (page: number) => Promise<void>;
+  onLimitChange: (value: number) => void;
+  onPageChange: (page: number) => Promise<void>;
   onSearch?: (term: string) => Promise<void>;
+  onChecked?: (items: any[]) => void;
 };
 
 const Table: React.FC<TableProps> = ({
-  rows = [],
-  columns = [],
-  stickyColumnKeys = [],
-  calculateColumns = [],
+  data = [],
+  headers = null,
+  totalItems = 0,
   perPage = 10,
+  currentPage = 1,
+  stickyColumns = [],
+  columnOperations = [],
+  onLimitChange,
   onPageChange = null,
   searchable = false,
   exportable = false,
   onSearch = null,
   showAllCheck = true,
   isCheckable = false,
+  onChecked = null,
 }) => {
-  // const [rows, setRows] = useState<object[]>([]);
   const [checkedItems, setCheckedItems] = useState<object[]>([]);
   const [search, setSearch] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pages, setPages] = useState<number[]>([]);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
-  const [perPage, setPerPage] = useState<number>(10);
+
+  // Generate pages based on total items and per page
+  const pages = useMemo(() => {
+    const totalPages = Math.ceil(totalItems / perPage);
+    const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+    return pages.length > 0 ? pages : [];
+  }, [totalItems, perPage]);
 
   // Debounced search
-
   const debouncedSearch = onSearch ? debounce(onSearch, 500) : null;
 
-  // Generate columns if not provided
-  const headers = useMemo(() => {
-    if (columns) return columns;
-    if (rows.length === 0) return [];
-    return Object.keys(rows[0]).map((key) => ({
+  // Generate headers
+  const tableHeaders = useMemo(() => {
+    if (headers) return headers;
+    if (data.length === 0) return [];
+    return Object.keys(data[0]).map((key) => ({
       label: formatHeader(key),
       key,
     }));
-  }, [columns, rows]);
+  }, [headers, data]);
 
   const toggleCheckAll = () => {
-    if (checkedItems.length === rows.length) {
+    if (checkedItems.length === data.length) {
       setCheckedItems([]);
+      onChecked && onChecked([]);
     } else {
-      setCheckedItems(rows);
+      setCheckedItems(data);
+      onChecked && onChecked(data);
     }
   };
 
@@ -72,7 +90,6 @@ const Table: React.FC<TableProps> = ({
     if (onPageChange) {
       await onPageChange(page);
     }
-    setCurrentPage(page);
   };
 
   const handleCheckboxChange = (item: object) => {
@@ -82,21 +99,21 @@ const Table: React.FC<TableProps> = ({
   };
 
   const filteredData = useMemo(() => {
-    return rows.filter((row) =>
-      headers.some((col) => {
-        const val = row[col.key];
+    return data.filter((item) =>
+      tableHeaders.some((col) => {
+        const val = item[col.key];
         return typeof val === "string" || typeof val === "number"
           ? val.toString().toLowerCase().includes(search.toLowerCase())
           : false;
       })
     );
-  }, [rows, headers, search]);
+  }, [data, tableHeaders, search]);
 
   const sortedData = useMemo(() => {
     if (!sortKey) {
       return filteredData;
     }
-    return [...filteredData].sort((a, b) => {
+    return filteredData.sort((a, b) => {
       if (a[sortKey] < b[sortKey]) {
         return sortAsc ? -1 : 1;
       }
@@ -118,13 +135,13 @@ const Table: React.FC<TableProps> = ({
 
   // Calculate column values if needed
   const calculatedColumns = useMemo(() => {
-    const results = calculateColumns.map(({ column, calculate }) => {
+    const results = columnOperations.map(({ key, operation }) => {
       let value;
-      const columnData = sortedData.map((item) => item[column]);
+      const columnData = sortedData.map((item) => item[key]);
       const dataType = getArrayType(columnData);
       const sum = columnData.reduce((sum, item) => sum + item, 0);
 
-      switch (calculate) {
+      switch (operation) {
         case "count":
           value = columnData.length;
           break;
@@ -155,20 +172,20 @@ const Table: React.FC<TableProps> = ({
         : value.toFixed(2);
 
       return {
-        key: column,
-        operation: calculate,
+        key: key,
+        operation: operation,
         value: value,
       };
     });
     return results;
-  }, [calculateColumns, sortedData]);
+  }, [columnOperations, sortedData]);
 
   const exportToExcel = async (format: "xlsx" | "csv") => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Sheet 1");
 
     // Add headers with styling
-    const headerRow = worksheet.addRow(headers.map((col) => col.label));
+    const headerRow = worksheet.addRow(tableHeaders.map((col) => col.label));
 
     // Style the header row
     headerRow.eachCell((cell) => {
@@ -190,16 +207,16 @@ const Table: React.FC<TableProps> = ({
       };
     });
 
-    // Add data rows
+    // Add data
     sortedData.forEach((row) => {
-      worksheet.addRow(headers.map((col) => row[col.key]));
+      worksheet.addRow(tableHeaders.map((col) => row[col.key]));
     });
 
     // Add calculated values if any
     // if (Object.keys(calculatedColumns).length > 0) {
     //   worksheet.addRow([]); // Empty row
     //   worksheet.addRow(["Calculated Values"]);
-    //   headers.forEach((col) => {
+    //   tableHeaders.forEach((col) => {
     //     if (calculatedColumns[col.key]) {
     //       worksheet.addRow([col.label, calculatedColumns[col.key]]);
     //     }
@@ -228,7 +245,7 @@ const Table: React.FC<TableProps> = ({
   };
 
   return (
-    <div>
+    <>
       <div className="flex items-center justify-between">
         {searchable && (
           <div className="search-box pb-4">
@@ -263,6 +280,7 @@ const Table: React.FC<TableProps> = ({
           <select
             id="export"
             className="h-9 bg-white border border-gray-300 text-sm rounded-md ms-0 px-2 focus:outline-none"
+            defaultValue="xlsx"
             onChange={(e) => handleExport(e.target.value as "xlsx" | "csv")}
           >
             <option value="">Export Table</option>
@@ -307,7 +325,7 @@ const Table: React.FC<TableProps> = ({
                         id="checkbox-all-search"
                         type="checkbox"
                         className="w-3.5 h-3.5 text-blue-600 bg-gray-100 border-gray-300 rounded-sm"
-                        checked={checkedItems.length === rows.length}
+                        checked={checkedItems.length === data.length}
                         onChange={toggleCheckAll}
                       />
                     ) : (
@@ -315,11 +333,11 @@ const Table: React.FC<TableProps> = ({
                     )}
                   </th>
                 )}
-                {headers.map((header) => (
+                {tableHeaders.map((header) => (
                   <th
                     key={header.key}
                     scope="col"
-                    className="px-4 py-3 border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 hover:cursor-pointer"
+                    className="border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 hover:cursor-pointer px-4 py-3"
                   >
                     <div
                       className="flex items-center justify-center gap-1"
@@ -371,10 +389,12 @@ const Table: React.FC<TableProps> = ({
                       />
                     </th>
                   )}
-                  {headers.map((col) => (
+                  {tableHeaders.map((col) => (
                     <td
                       key={col.key}
-                      className="px-4 py-2 border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-center"
+                      className={`${
+                        stickyColumns.includes(col.key) ? "sticky left-0" : ""
+                      } border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-center px-4 py-2`}
                     >
                       {row[col.key]}
                     </td>
@@ -386,7 +406,7 @@ const Table: React.FC<TableProps> = ({
                   {isCheckable && (
                     <td className="px-4 py-2 border-2 border-t-0 border-l-0 last:border-r-0 border-blue-100/50 text-center"></td>
                   )}
-                  {headers.map((header) => {
+                  {tableHeaders.map((header) => {
                     const columnItem = calculatedColumns.find(
                       (r) => r.key === header.key
                     );
@@ -420,7 +440,7 @@ const Table: React.FC<TableProps> = ({
             value={perPage}
             defaultValue={10}
             onChange={(e) =>
-              setPerPage(
+              onLimitChange(
                 Number(e.target.value) == 0 ? 10 : Number(e.target.value)
               )
             }
@@ -501,7 +521,7 @@ const Table: React.FC<TableProps> = ({
           </ul>
         </nav>
       )}
-    </div>
+    </>
   );
 };
 
